@@ -10,12 +10,15 @@ setup(
     install_requires=[
     "torch>=2.0.0",
     'functorch',
+    'opt-einsum'
     ],
     extras_requires=[
     'numpy',
-    'pandas'
-    'scipy'
-    'tqdm'
+    'pandas',
+    'scipy',
+    'tqdm',
+    'pytest',
+    'pyyaml'
     ],
     include_package_data = True,
     platforms = "any",
