@@ -1,7 +1,8 @@
 import math
-from typing import Optional
+from typing import Optional, Union
 
 from .Plate import Plate, tree_values, update_scope_inputs_params, update_scope_sample
+from .BoundPlate import BoundPlate
 from .Group import Group
 from .utils import *
 from .reduce_Ks import reduce_Ks, sample_Ks
@@ -9,15 +10,17 @@ from .Split import Split
 from .SamplingType import SamplingType
 from .dist import Dist
 from .logpq import logPQ_dist, logPQ_group, logPQ_plate
+from .Data import Data
+
+PBP = Union[Plate, BoundPlate]
 
 def logPQ_sample(
     name:Optional[str],
-    P:Plate, 
-    Q:Plate, 
+    P: PBP, 
+    Q: PBP, 
     sample: dict, 
     inputs_params_P: dict,
     inputs_params_Q: dict,
-    data: dict,
     extra_log_factors: dict, 
     scope_P: dict[str, Tensor], 
     scope_Q: dict[str, Tensor], 
@@ -30,12 +33,11 @@ def logPQ_sample(
     N_dim:Dim,
     num_samples:int):
 
-    assert isinstance(P, Plate)
-    assert isinstance(Q, Plate)
+    assert isinstance(P, (Plate, BoundPlate))
+    assert isinstance(Q, (Plate, BoundPlate))
     assert isinstance(sample, dict)
     assert isinstance(inputs_params_P, dict)
     assert isinstance(inputs_params_Q, dict)
-    assert isinstance(data, dict)
     assert isinstance(extra_log_factors, dict)
     assert isinstance(indices, dict)
 
@@ -52,7 +54,7 @@ def logPQ_sample(
     scope_P = update_scope_inputs_params(scope_P, inputs_params_P)
     scope_Q = update_scope_inputs_params(scope_Q, inputs_params_Q)
 
-    assert set(P.prog.keys()) == set([*sample.keys(), *tree_values(data).keys()])
+    assert set(P.prog.keys()) == set([*sample.keys()])
 
     lps = list(tree_values(extra_log_factors).values())
 
@@ -66,11 +68,12 @@ def logPQ_sample(
     for childname, childP in P.prog.items():
         childQ = Q.prog.get(childname) 
 
-        #childQ doesn't necessarily have a distribution if sample_data is data.
-        #childQ defaults to None in that case.
+        #If childQ is data, then we don't need to do anything
+        if isinstance(childQ, Data):
+            continue
 
         if isinstance(childP, Dist):
-            assert isinstance(childQ, (Dist, type(None)))
+            assert isinstance(childQ, (Dist))
             method = logPQ_dist
         elif isinstance(childP, Plate):
             assert isinstance(childQ, Plate)
@@ -85,7 +88,6 @@ def logPQ_sample(
             P=childP, 
             Q=childQ, 
             sample=sample.get(childname),
-            data=data.get(childname),
             inputs_params_P=inputs_params_P.get(childname),
             inputs_params_Q=inputs_params_Q.get(childname),
             extra_log_factors=extra_log_factors.get(childname),
@@ -108,7 +110,7 @@ def logPQ_sample(
         if isinstance(dist, (Dist, Group)):
             all_Ks.append(groupvarname2Kdim[varname])
         else:
-            assert isinstance(dist, Plate)
+            assert isinstance(dist, (Plate, Data))
             
 
     # Index into each lp with the indices we've collected so far
@@ -132,7 +134,6 @@ def logPQ_sample(
             P=childP, 
             Q=childQ, 
             sample=sample.get(childname),
-            data=data.get(childname),
             inputs_params_P=inputs_params_P.get(childname),
             inputs_params_Q=inputs_params_Q.get(childname),
             extra_log_factors=extra_log_factors.get(childname),

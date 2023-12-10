@@ -6,6 +6,7 @@ import torch.distributions as td
 import functorch
 from functorch.dim import Dim
 from torch.utils.checkpoint import checkpoint
+import collections
 
 Tensor = (functorch.dim.Tensor, t.Tensor)
 OptionalTensor = (type(None), functorch.dim.Tensor, t.Tensor)
@@ -363,3 +364,40 @@ def platenames2platedims(plates, platenames):
     return [plates[pn] for pn in platenames]
 
 
+def corresponding_plates(platedims1 : dict[str, Tensor], platedims2 : dict[str, Tensor],
+                         sample1 : Tensor, sample2 : Tensor):
+    '''For any platedims which share a name (but not necessarily size) and appear in both samples,
+    returns two lists of those platedims in the same order.'''
+    assert isinstance(platedims1, dict)
+    assert isinstance(platedims2, dict)
+    assert isinstance(sample1, Tensor)
+    assert isinstance(sample2, Tensor)
+
+    dimnames1 = [name for (name, dim) in platedims1.items() if dim in set(sample1.dims)]
+    dimnames2 = [name for (name, dim) in platedims2.items() if dim in set(sample2.dims)]
+    assert set(dimnames1) == set(dimnames2)
+
+    dimnames = dimnames1
+
+    dims1 = [platedims1[name] for name in dimnames]
+    dims2 = [platedims2[name] for name in dimnames]
+
+    return dims1, dims2
+
+
+
+
+def merge_dict_with_subdicts(dict1: dict, dict2: dict) -> dict:
+    """
+    similar behaviour to builtin dict.update - but knows how to handle nested dicts
+    """
+    q = collections.deque([(dict1, dict2)])
+    while len(q) > 0:
+        d1, d2 = q.pop()
+        for k, v in d2.items():
+            if k in d1 and isinstance(d1[k], dict) and isinstance(v, dict):
+                q.append((d1[k], v))
+            else:
+                d1[k] = v
+
+    return dict1

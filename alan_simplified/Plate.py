@@ -6,7 +6,8 @@ from .utils import *
 from .SamplingType import SamplingType
 from .dist import Dist
 from .Group import Group
-from .utils import *
+from .Data import Data
+
 
 
 
@@ -41,9 +42,9 @@ class Plate():
 
         scope = update_scope_inputs_params(scope, inputs_params)
         sample = {}
-
+        
         for childname, childP in self.prog.items():
-
+            
             childsample = childP.sample(
                 name=childname,
                 scope=scope, 
@@ -59,6 +60,60 @@ class Plate():
             scope = update_scope_sample(scope, childname, childP, childsample)
 
         return sample
+    
+    def sample_extended(
+            self,
+            sample:dict,
+            name:Optional[str],
+            scope:dict[str, Tensor],
+            inputs_params:dict,
+            original_platedims:dict[str, Dim],
+            extended_platedims:dict[str, Dim],
+            active_original_platedims:list[Dim],
+            active_extended_platedims:list[Dim],
+            Ndim:Dim,
+            reparam:bool,
+            extended_data:Optional[dict[str, Tensor]]):
+
+        # NOTE: I think we might be able to get rid of active_original_platedims and active_extended_platedims
+        #  in this function (and the corresponding functions in Group and Dist) as they can be inferred from
+        #  the samples/data and the dicts original_platedims and extended_platedims.
+        #  At the moment, only active_extended_platedims is used: in the Dist function when calculating the
+        #  logprobs of extended data, but there might be a smarter way of providing extended_data that 
+        #  circumvents this need.
+        if name is not None:
+            active_original_platedims = [*active_original_platedims, original_platedims[name]]
+            active_extended_platedims = [*active_extended_platedims, extended_platedims[name]]
+
+        scope = update_scope_inputs_params(scope, inputs_params)
+
+        original_ll = {}
+        extended_ll = {}
+
+        for childname, childP in self.prog.items():
+
+            childsample, child_original_ll, child_extended_ll = childP.sample_extended(
+                sample=sample.get(childname),
+                name=childname,
+                scope=scope,
+                inputs_params=inputs_params.get(childname),
+                original_platedims=original_platedims,
+                extended_platedims=extended_platedims,
+                active_original_platedims=active_original_platedims,
+                active_extended_platedims=active_extended_platedims,
+                Ndim=Ndim,
+                reparam=reparam,
+                extended_data=extended_data # pass all extended data, this is a flat dict whereas original_data has a tree structure
+            )
+
+            sample[childname] = childsample
+            scope = update_scope_sample(scope, childname, childP, childsample)
+
+            original_ll = {**original_ll, **child_original_ll}
+            extended_ll = {**extended_ll, **child_extended_ll}
+
+
+        return sample, original_ll, extended_ll
 
     def posterior_sample(
             self,
@@ -113,7 +168,7 @@ class Plate():
                     assert 1 == conditionals.ndim
                 assert set(generic_dims(conditionals)) == set()
 
-            else:
+            elif isinstance(childP, Plate):
                 #add sub-plate as a tree/nested dict to result, but not to scope. 
                 result[childname] = childP.sample(
                     conditionals=conditionals.get(childname),
@@ -133,7 +188,7 @@ class Plate():
         for childname, childP in self.prog.items():
             if isinstance(childP, (Dist, Group)):
                 result[childname] = Dim(f"K_{childname}", K)
-            else:
+            elif isinstance(childP, Plate):
                 assert isinstance(childP, Plate)
                 result = {**result, **childP.groupvarname2Kdim(K)}
         return result
@@ -149,7 +204,7 @@ class Plate():
             if isinstance(v, (Plate, Group)):
                 result = [*result, *v.all_prog_names()]
             else:
-                assert isinstance(v, Dist)
+                assert isinstance(v, (Dist, Data))
         return result
 
     def varname2groupvarname(self):
@@ -257,7 +312,7 @@ def update_scope_sample(scope: dict[str, Tensor], name:str, dgpt, sample):
             assert isinstance(gs, Tensor)
             scope[gn] = gs
     else:
-        assert isinstance(dgpt, Plate)
+        assert isinstance(dgpt, (Plate, Data))
     return scope
 
 

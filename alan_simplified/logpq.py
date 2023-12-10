@@ -8,6 +8,7 @@ from .reduce_Ks import reduce_Ks
 from .Split import Split
 from .SamplingType import SamplingType
 from .dist import Dist
+from .Data import Data
 
 def logPQ_plate(
         name:Optional[str],
@@ -16,7 +17,6 @@ def logPQ_plate(
         sample: dict, 
         inputs_params_P: dict,
         inputs_params_Q: dict,
-        data: dict,
         extra_log_factors: dict, 
         scope_P: dict[str, Tensor], 
         scope_Q: dict[str, Tensor], 
@@ -29,7 +29,6 @@ def logPQ_plate(
     assert isinstance(sample, dict)
     assert isinstance(inputs_params_P, dict)
     assert isinstance(inputs_params_Q, dict)
-    assert isinstance(data, dict)
     assert isinstance(extra_log_factors, dict)
 
     #Push an extra plate, if not the top-layer plate (top-layer plate is signalled
@@ -44,7 +43,8 @@ def logPQ_plate(
     scope_P = update_scope_inputs_params(scope_P, inputs_params_P)
     scope_Q = update_scope_inputs_params(scope_Q, inputs_params_Q)
 
-    assert set(P.prog.keys()) == set([*sample.keys(), *tree_values(data).keys()])
+
+    assert set(P.prog.keys()) == set([*sample.keys()])
 
     lps = list(tree_values(extra_log_factors).values())
 
@@ -62,7 +62,7 @@ def logPQ_plate(
         #childQ defaults to None in that case.
 
         if isinstance(childP, Dist):
-            assert isinstance(childQ, (Dist, type(None)))
+            assert isinstance(childQ, (Dist, type(None), Data))
             method = logPQ_dist
         elif isinstance(childP, Plate):
             assert isinstance(childQ, Plate)
@@ -77,7 +77,6 @@ def logPQ_plate(
             P=childP, 
             Q=childQ, 
             sample=sample.get(childname),
-            data=data.get(childname),
             inputs_params_P=inputs_params_P.get(childname),
             inputs_params_Q=inputs_params_Q.get(childname),
             extra_log_factors=extra_log_factors.get(childname),
@@ -100,7 +99,7 @@ def logPQ_plate(
         if isinstance(dist, (Dist, Group)):
             all_Ks.append(groupvarname2Kdim[varname])
         else:
-            assert isinstance(dist, Plate)
+            assert isinstance(dist, (Plate, Data))
 
     #Sum out Ks
     lp = reduce_Ks(lps, all_Ks)
@@ -119,7 +118,6 @@ def logPQ_dist(
         sample: OptionalTensor,
         inputs_params_P: dict,
         inputs_params_Q: dict,
-        data: OptionalTensor,
         extra_log_factors: None,
         scope_P: dict[str, Tensor], 
         scope_Q: dict[str, Tensor], 
@@ -132,19 +130,16 @@ def logPQ_dist(
     assert isinstance(sample, OptionalTensor)
     assert inputs_params_P is None
     assert inputs_params_Q is None
-    assert isinstance(data, OptionalTensor)
     assert extra_log_factors is None
 
-    #we must have either sample or data, but not both.
-    assert (sample is None) != (data is None)
-    sample_data = sample if sample is not None else data
+
     #if we have a sample, we must have a Q
     if sample is not None:
         assert Q is not None
 
-    lpq = P.log_prob(sample=sample_data, scope=scope_P)
+    lpq = P.log_prob(sample=sample, scope=scope_P)
 
-    if sample is not None:
+    if not isinstance(Q, Data):
         Kdim = groupvarname2Kdim[name]
         lq = Q.log_prob(sample=sample, scope=scope_Q)
         lq = sampling_type.reduce_logQ(lq, active_platedims, Kdim)
@@ -160,7 +155,6 @@ def logPQ_group(
         sample: dict, 
         inputs_params_P: dict,
         inputs_params_Q: dict,
-        data: None,
         extra_log_factors: None, 
         scope_P: dict[str, Tensor], 
         scope_Q: dict[str, Tensor], 
@@ -174,7 +168,6 @@ def logPQ_group(
     assert isinstance(sample, dict)
     assert inputs_params_P is None
     assert inputs_params_Q is None
-    assert data is None
     assert extra_log_factors is None
 
     Kdim = groupvarname2Kdim[name]
