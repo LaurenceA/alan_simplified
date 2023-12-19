@@ -31,8 +31,7 @@ def einsum_args(lps, sum_dims):
     return [val for pair in zip(undim_lps, arg_idxs) for val in pair] + [out_idxs], out_dims
 
 
-def sample_Ks(lps, Ks_to_sum, N_dim, num_samples):
-
+def sample_Ks(lps, Ks_to_sum, N_dim, num_samples, groupvarname2Kdim):
     """
     Fundamental method that returns K samples from the posterior
     opt_einsum gives an "optimization path", i.e. the indicies of lps to reduce.
@@ -50,8 +49,8 @@ def sample_Ks(lps, Ks_to_sum, N_dim, num_samples):
     for lps, kdims_to_sample in zip(lps_for_sampling[::-1], Ks_to_sample[::-1]): 
         lp = sum(lps)
 
-        for dim in list(set(generic_dims(lp)).intersection(set(indices.keys()))):
-            lp = lp.order(dim)[indices[dim]]
+        for dim in list(set(generic_dims(lp)).intersection(set([groupvarname2Kdim[name[2:]] for name in indices.keys()]))):
+            lp = lp.order(dim)[indices[str(dim)]]
         
         #If there is more than one Kdim to sample from this factor we need to sample from the joint distribution
         #To do this we sample from a multinomial over the indices of the lp tensor
@@ -64,7 +63,7 @@ def sample_Ks(lps, Ks_to_sum, N_dim, num_samples):
         unravelled_indices = unravel_index(sampled_flat_idx, shape=[dim.size for dim in kdims_to_sample])
         
         for idx, kdim in zip(unravelled_indices, kdims_to_sample):
-            indices[kdim] = idx[N_dim]
+            indices[str(kdim)] = idx[N_dim]
 
                 
         #Otherwise we can just sample from the multinomial with probabilities given by the Kdim dimension of the lp tensor

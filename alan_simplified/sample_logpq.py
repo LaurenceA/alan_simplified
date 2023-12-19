@@ -12,7 +12,6 @@ from .dist import Dist
 from .logpq import logPQ_dist, logPQ_group, logPQ_plate, lp_getter
 from .Data import Data
 
-PBP = Union[Plate, BoundPlate]
 
 def logPQ_sample(
     name:Optional[str],
@@ -64,12 +63,12 @@ def logPQ_sample(
 
     # Index into each lp with the indices we've collected so far
     for i in range(len(lps)):
-        for dim in list(set(generic_dims(lps[i])).intersection(set(indices.keys()))):
-            lps[i] = lps[i].order(dim)[indices[dim]]
+        for dim in list(set(generic_dims(lps[i])).intersection(set([groupvarname2Kdim[name[2:]] for name in indices.keys()]))):
+            lps[i] = lps[i].order(dim)[indices[str(dim)]]
 
 
     if len(all_Ks) > 0:
-        indices = {**indices, **sample_Ks(lps, all_Ks,N_dim, num_samples)}
+        indices = {**indices, **sample_Ks(lps, all_Ks, N_dim, num_samples, groupvarname2Kdim)}
         
     for childname, childP in P.prog.items():
         childQ = Q.prog.get(childname)

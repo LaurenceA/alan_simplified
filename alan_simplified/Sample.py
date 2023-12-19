@@ -296,11 +296,12 @@ class Sample():
         
         
     def index_in(self, post_idxs: dict[Dim, Tensor], Ndim: Dim):
-        '''Takes a sample (nested dict of tensors with Kdims) and a dictionary of Kdims to indices.
-        Returns a new sample (nested dict of tensors with Ndims instead of Kdims) with the indices
-        applied to the sample.'''
+        '''Takes a sample (nested dict of tensors with Kdims) and a dictionary of dim names (i.e. strings) 
+        to indices. Returns a new sample (nested dict of tensors with Ndims instead of Kdims) with the 
+        indices applied to the sample.'''
+        dim_idxs = {self.groupvarname2Kdim[name[2:]]: idx for (name, idx) in post_idxs.items()}
 
-        return index_into_sample(self.sample, post_idxs, Ndim)
+        return index_into_sample(self.sample, dim_idxs, Ndim)
     
     def clone_sample(self, sample: dict):
         '''Takes a sample (nested dict of tensors) and returns a new dict with the same structure
